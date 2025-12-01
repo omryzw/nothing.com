@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>nothing.</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Space Mono', monospace;
+            background-color: #000000;
+            color: #ffffff;
+            overflow: hidden; /* Prevent scrolling triggers */
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .glitch-wrapper {
+            position: relative;
+        }
+
+        .shake {
+            animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+        }
+
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-1px, 0, 0); }
+            20%, 80% { transform: translate3d(2px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+            40%, 60% { transform: translate3d(4px, 0, 0); }
+        }
+
+        /* Scanline effect for retro feel */
+        .scanlines {
+            background: linear-gradient(
+                to bottom,
+                rgba(255,255,255,0),
+                rgba(255,255,255,0) 50%,
+                rgba(0,0,0,0.2) 50%,
+                rgba(0,0,0,0.2)
+            );
+            background-size: 100% 4px;
+            position: fixed;
+            pointer-events: none;
+            top: 0; right: 0; bottom: 0; left: 0;
+            z-index: 10;
+        }
+
+        .rank-glow {
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+        }
+        
+        #fail-overlay {
+            background: rgba(255, 0, 0, 0.9);
+            transition: opacity 0.1s;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col items-center justify-center relative cursor-none">
+
+    <div class="scanlines"></div>
+
+    <!-- Main Content -->
+    <div id="main-container" class="z-20 text-center flex flex-col items-center gap-6 transition-all duration-500 opacity-100">
+        
+        <h1 id="main-word" class="text-6xl md:text-9xl font-bold tracking-tighter lowercase">nothing.</h1>
+        
+        <div class="flex flex-col gap-2 items-center">
+            <p id="timer" class="text-xl md:text-2xl opacity-50 font-light">00:00:00</p>
+            <p id="status-message" class="text-sm text-gray-500 tracking-widest uppercase">Initializing Void...</p>
+        </div>
+
+        <div id="rank-container" class="mt-8 opacity-0 transition-opacity duration-1000">
+            <span class="text-xs text-gray-600 uppercase">Current Rank</span>
+            <div id="rank-display" class="text-xl text-white rank-glow">Dust Mote</div>
+        </div>
+
+    </div>
+
+    <!-- Fail Overlay -->
+    <div id="fail-overlay" class="fixed inset-0 flex items-center justify-center opacity-0 pointer-events-none z-50">
+        <div class="text-center">
+            <h2 class="text-black text-6xl md:text-8xl font-black uppercase tracking-tighter">YOU DID<br>SOMETHING</h2>
+            <p class="text-black text-xl mt-4 font-bold">Movement Detected.</p>
+            <p id="fail-score" class="text-black text-lg mt-2">You achieved nothing for: 0s</p>
+            
+            <div class="mt-8 flex gap-4 justify-center pointer-events-auto cursor-auto">
+                <button onclick="restartGame()" class="bg-black text-white px-6 py-3 border-2 border-black hover:bg-transparent hover:text-black transition-colors font-bold uppercase">
+                    Try Again
+                </button>
+                <button onclick="shareScore()" class="bg-transparent text-black px-6 py-3 border-2 border-black hover:bg-black hover:text-white transition-colors font-bold uppercase">
+                    Share Failure
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Instructions / Footer -->
+    <div class="fixed bottom-8 text-center opacity-30 text-xs w-full pointer-events-none">
+        Don't move. Don't touch. Don't scroll. Just be.
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed top-4 bg-white text-black px-4 py-2 rounded shadow-lg transform -translate-y-20 transition-transform duration-300 z-50 font-bold">
+        Copied to clipboard!
+    </div>
+
+    <script>
+        // State
+        let startTime = null;
+        let timerInterval = null;
+        let isPlaying = false;
+        let lastScore = "00:00:00";
+        let rankIndex = 0;
+        
+        // DOM Elements
+        const mainWord = document.getElementById('main-word');
+        const timerDisplay = document.getElementById('timer');
+        const statusDisplay = document.getElementById('status-message');
+        const failOverlay = document.getElementById('fail-overlay');
+        const failScore = document.getElementById('fail-score');
+        const mainContainer = document.getElementById('main-container');
+        const rankContainer = document.getElementById('rank-container');
+        const rankDisplay = document.getElementById('rank-display');
+        const toast = document.getElementById('toast');
+
+        // Ranks based on seconds
+        const ranks = [
+            { time: 0, title: "Dust Mote", msg: "Doing nothing..." },
+            { time: 5, title: "Empty Space", msg: "Good. Stay still." },
+            { time: 15, title: "Static Noise", msg: "Embrace the boredom." },
+            { time: 30, title: "Vacuum", msg: "You are becoming nothing." },
+            { time: 60, title: "Void Walker", msg: "Impressive emptiness." },
+            { time: 120, title: "Abyss Gazer", msg: "The void gazes back." },
+            { time: 300, title: "Null Entity", msg: "Do you even exist?" },
+            { time: 600, title: "Absolute Zero", msg: "Godlike nothingness." }
+        ];
+
+        // Format time helper
+        function formatTime(ms) {
+            const date = new Date(ms);
+            return date.toISOString().substr(11, 8);
+        }
+
+        function getReadableTime(ms) {
+            const seconds = Math.floor(ms / 1000);
+            if (seconds < 60) return `${seconds} seconds`;
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = seconds % 60;
+            return `${minutes}m ${remainingSeconds}s`;
+        }
+
+        function updateRank(elapsedSeconds) {
+            // Find the highest rank achieved
+            let currentRank = ranks[0];
+            for (let i = ranks.length - 1; i >= 0; i--) {
+                if (elapsedSeconds >= ranks[i].time) {
+                    currentRank = ranks[i];
+                    break;
+                }
+            }
+
+            if (rankDisplay.innerText !== currentRank.title) {
+                // New rank unlocked effect
+                rankDisplay.innerText = currentRank.title;
+                statusDisplay.innerText = currentRank.msg;
+                
+                rankDisplay.classList.add('shake');
+                setTimeout(() => rankDisplay.classList.remove('shake'), 500);
+
+                // Reveal rank container after 5 seconds
+                if (elapsedSeconds >= 5) {
+                    rankContainer.classList.remove('opacity-0');
+                }
+            }
+        }
+
+        // The Game Loop
+        function updateTimer() {
+            if (!isPlaying) return;
+
+            const now = Date.now();
+            const diff = now - startTime;
+            
+            timerDisplay.innerText = formatTime(diff);
+            
+            // Random subtle glitch effect on the main word
+            if (Math.random() > 0.99) {
+                mainWord.style.opacity = Math.random();
+                setTimeout(() => mainWord.style.opacity = 1, 50);
+            }
+
+            updateRank(Math.floor(diff / 1000));
+        }
+
+        function failGame() {
+            if (!isPlaying) return;
+            
+            isPlaying = false;
+            clearInterval(timerInterval);
+            const finalTime = Date.now() - startTime;
+            lastScore = getReadableTime(finalTime);
+
+            // Visual Fail Effects
+            failOverlay.style.opacity = '1';
+            failOverlay.style.pointerEvents = 'auto';
+            document.body.style.cursor = 'auto'; // Bring back cursor
+            
+            failScore.innerText = `You achieved nothing for: ${lastScore}`;
+            
+            // Shake the screen
+            document.body.classList.add('shake');
+            setTimeout(() => document.body.classList.remove('shake'), 500);
+        }
+
+        function restartGame() {
+            // Reset UI
+            failOverlay.style.opacity = '0';
+            failOverlay.style.pointerEvents = 'none';
+            document.body.style.cursor = 'none'; // Hide cursor again
+            rankContainer.classList.add('opacity-0');
+            
+            // Reset Logic
+            startGame();
+        }
+
+        function startGame() {
+            // Small delay to prevent immediate fail if user just clicked button
+            setTimeout(() => {
+                startTime = Date.now();
+                isPlaying = true;
+                timerInterval = setInterval(updateTimer, 100);
+                
+                // Reset text
+                rankDisplay.innerText = ranks[0].title;
+                statusDisplay.innerText = ranks[0].msg;
+                timerDisplay.innerText = "00:00:00";
+            }, 500);
+        }
+
+        function shareScore() {
+            const text = `I successfully did nothing for ${lastScore} at nothing.com. Can you do less?`;
+            
+            // Fallback for clipboard
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                showToast();
+            } catch (err) {
+                console.error('Unable to copy', err);
+            }
+            document.body.removeChild(textArea);
+        }
+
+        function showToast() {
+            toast.style.transform = "translateY(0)";
+            setTimeout(() => {
+                toast.style.transform = "translateY(-5rem)";
+            }, 2000);
+        }
+
+        // --- Event Listeners for "Doing Something" ---
+
+        const triggers = ['mousemove', 'keydown', 'scroll', 'touchstart', 'wheel'];
+
+        triggers.forEach(event => {
+            window.addEventListener(event, (e) => {
+                if (isPlaying) {
+                    // We allow a tiny buffer for mouse drift (optional, but good for UX)
+                    failGame();
+                }
+            });
+        });
+
+        // Initialize
+        // We start with a click to get into the "zone" (and handle audio context if we added audio later)
+        window.onload = () => {
+             // We start automatically but give a 1s grace period
+             setTimeout(startGame, 1000);
+        };
+
+    </script>
+</body>
+</html>
