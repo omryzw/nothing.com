@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>nothing.</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Add html2canvas library for screenshot generation -->
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
     <style>
         body {
@@ -55,6 +57,11 @@
             background: rgba(255, 0, 0, 0.9);
             transition: opacity 0.1s;
         }
+
+        /* Add style for screenshot-only footnote */
+        #screenshot-footnote {
+            display: none;
+        }
     </style>
 </head>
 <body class="h-screen w-screen flex flex-col items-center justify-center relative cursor-none">
@@ -93,6 +100,8 @@
                     Share Failure
                 </button>
             </div>
+            <!-- Add footnote here, hidden by default -->
+            <p id="screenshot-footnote" class="text-black text-sm mt-8 font-bold uppercase">nothing.co.zw</p>
         </div>
     </div>
 
@@ -124,6 +133,7 @@
         const rankContainer = document.getElementById('rank-container');
         const rankDisplay = document.getElementById('rank-display');
         const toast = document.getElementById('toast');
+        const screenshotFootnote = document.getElementById('screenshot-footnote');
 
         // Ranks based on seconds
         const ranks = [
@@ -240,23 +250,78 @@
         }
 
         function shareScore() {
+            const shareBtn = document.querySelector('button[onclick="shareScore()"]');
+            const originalText = shareBtn.innerText;
+            shareBtn.innerText = "Generating...";
+            shareBtn.disabled = true;
+
+            // 1. Copy text to clipboard using execCommand
             const text = `I successfully did nothing for ${lastScore} at nothing.com. Can you do less?`;
             
-            // Fallback for clipboard
             const textArea = document.createElement("textarea");
             textArea.value = text;
+            textArea.style.position = "fixed"; // Avoid scrolling to bottom
+            textArea.style.opacity = "0";
             document.body.appendChild(textArea);
+            textArea.focus();
             textArea.select();
+            
             try {
-                document.execCommand('copy');
-                showToast();
+                const successful = document.execCommand('copy');
+                if(successful) {
+                    showToast("Text copied & Image generating...");
+                } else {
+                    showToast("Image generating...");
+                }
             } catch (err) {
                 console.error('Unable to copy', err);
+                showToast("Image generating...");
             }
             document.body.removeChild(textArea);
+
+
+            // 2. Generate Screenshot using html2canvas
+            // Show footnote for screenshot
+            screenshotFootnote.style.display = 'block';
+
+            // We capture the document body to get the full effect
+            html2canvas(document.body, {
+                backgroundColor: null, // Use existing background
+                scale: window.devicePixelRatio || 1, // Capture at proper resolution for sharper image
+                logging: false,
+                useCORS: true, // Enable CORS for any external assets (like fonts)
+                // The fail overlay is what we want to capture, so we don't need to hide anything specific
+            }).then(canvas => {
+                // Hide footnote again
+                screenshotFootnote.style.display = 'none';
+
+                // Convert canvas to image data URL
+                // We use image/octet-stream to force a download in some browsers
+                const image = canvas.toDataURL("image/png").replace("image/png", "image/octet-stream");
+                
+                // Create a temporary link to trigger download
+                const link = document.createElement('a');
+                link.download = `nothing-score-${Date.now()}.png`;
+                link.href = image;
+                // Trigger the download
+                link.click();
+                
+                // Reset button state
+                shareBtn.innerText = originalText;
+                shareBtn.disabled = false;
+            }).catch(err => {
+                // Hide footnote again
+                screenshotFootnote.style.display = 'none';
+
+                console.error('Screenshot failed:', err);
+                shareBtn.innerText = originalText;
+                shareBtn.disabled = false;
+                showToast("Screenshot failed :(");
+            });
         }
 
-        function showToast() {
+        function showToast(message = "Copied to clipboard!") {
+            toast.innerText = message;
             toast.style.transform = "translateY(0)";
             setTimeout(() => {
                 toast.style.transform = "translateY(-5rem)";
