@@ -2,13 +2,117 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Updated viewport to prevent zooming and native touch gestures on mobile -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>nothing.</title>
     <link rel="icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=">
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Add html2canvas library for screenshot generation -->
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+    
+    <!-- Firebase SDKs -->
+    <script type="module">
+        // We use the 11.6.1 version to ensure compatibility with the code structure
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- YOUR FIREBASE CONFIGURATION ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyCnisvvW18VtF1-7849NYFQ_GmXfOMqRv4",
+            authDomain: "nothing-game-a0fbd.firebaseapp.com",
+            projectId: "nothing-game-a0fbd",
+            storageBucket: "nothing-game-a0fbd.firebasestorage.app",
+            messagingSenderId: "143010205306",
+            appId: "1:143010205306:web:2cb1536fb1a1794961f5c3",
+            measurementId: "G-2RHXNY24XK"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // We use your projectId as the unique app identifier for the database path
+        const appId = firebaseConfig.projectId;
+
+        // Global variables to expose to window for the game logic
+        window.db = db;
+        window.auth = auth;
+        window.signInAnonymously = signInAnonymously;
+        window.collection = collection;
+        window.addDoc = addDoc;
+        window.query = query;
+        window.orderBy = orderBy;
+        window.limit = limit;
+        window.onSnapshot = onSnapshot;
+        window.serverTimestamp = serverTimestamp;
+        window.appId = appId;
+
+        // Start Auth immediately
+        signInAnonymously(auth).then(() => {
+            console.log("Connected to Void Network.");
+            initLeaderboardListener();
+        }).catch((error) => {
+            console.error("Connection to Void failed:", error);
+            const list = document.getElementById('leaderboard-list');
+            if(list) list.innerHTML = '<li class="text-xs text-red-500">Connection Failed (Check Console)</li>';
+        });
+
+        function initLeaderboardListener() {
+            // Path: /artifacts/nothing-game-a0fbd/public/data/scores
+            const q = query(
+                collection(db, 'artifacts', appId, 'public', 'data', 'scores'), 
+                orderBy('seconds', 'desc'), 
+                limit(5)
+            );
+            
+            onSnapshot(q, (snapshot) => {
+                const list = document.getElementById('leaderboard-list');
+                if(!list) return;
+                list.innerHTML = '';
+                
+                let rank = 1;
+                snapshot.forEach((doc) => {
+                    const data = doc.data();
+                    const li = document.createElement('li');
+                    li.className = "flex justify-between text-xs md:text-sm border-b border-gray-800 py-1";
+                    
+                    // --- SECURITY FIX: PREVENT XSS ---
+                    // Instead of innerHTML string injection, we build elements safely
+                    
+                    // Left container (Rank + Name)
+                    const leftSpan = document.createElement('span');
+                    
+                    const rankSpan = document.createElement('span');
+                    rankSpan.className = "text-gray-500 mr-2";
+                    rankSpan.textContent = `#${rank}`;
+                    
+                    // Sanitize name by using textContent (treats HTML as plain text)
+                    const nameText = document.createTextNode(data.name || "NIL"); 
+                    
+                    leftSpan.appendChild(rankSpan);
+                    leftSpan.appendChild(nameText);
+                    
+                    // Right container (Time)
+                    const rightSpan = document.createElement('span');
+                    rightSpan.textContent = data.timeStr || "0s";
+                    
+                    li.appendChild(leftSpan);
+                    li.appendChild(rightSpan);
+                    list.appendChild(li);
+                    rank++;
+                });
+            }, (error) => {
+                console.error("Leaderboard sync error:", error);
+                if(error.code === 'permission-denied') {
+                    const list = document.getElementById('leaderboard-list');
+                    if(list) list.innerHTML = '<li class="text-xs text-red-500">Error: Database Locked</li>';
+                }
+            });
+        }
+    </script>
+
     <style>
         body {
             font-family: 'Space Mono', monospace;
@@ -17,6 +121,8 @@
             overflow: hidden; /* Prevent scrolling triggers */
             user-select: none;
             -webkit-user-select: none;
+            /* CRITICAL for mobile: prevents browser handling of gestures like scroll/zoom */
+            touch-action: none; 
         }
 
         .glitch-wrapper {
@@ -55,33 +161,38 @@
         }
         
         #fail-overlay {
-            background: rgba(255, 0, 0, 0.9);
+            background: rgba(255, 0, 0, 0.95);
             transition: opacity 0.1s;
         }
 
-        /* Add style for screenshot-only footnote */
         #screenshot-footnote {
             display: none;
         }
+
+        /* Leaderboard Input Animation */
+        .blink-caret {
+            animation: blink 1s step-end infinite;
+        }
+        @keyframes blink { 50% { opacity: 0; } }
     </style>
 </head>
-<!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-HS4HMKWSRQ"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-
-  gtag('config', 'G-HS4HMKWSRQ');
-</script>
 <body class="h-screen w-screen flex flex-col items-center justify-center relative cursor-none">
 
     <div class="scanlines"></div>
 
-    <!-- Main Content -->
+
+    <div class="fixed top-4 right-4 z-30 w-32 md:w-48 opacity-60 hover:opacity-100 transition-opacity">
+        <h3 class="text-[10px] md:text-xs uppercase font-bold border-b border-white mb-2 pb-1 text-right md:text-left">Global Leaderboard</h3>
+        <ul id="leaderboard-list" class="space-y-1 text-right md:text-left">
+            <li class="text-xs text-gray-500">Loading Void...</li>
+        </ul>
+    </div>
+
+
     <div id="main-container" class="z-20 text-center flex flex-col items-center gap-6 transition-all duration-500 opacity-100">
         
-        <h1 id="main-word" class="text-6xl md:text-9xl font-bold tracking-tighter lowercase">nothing.</h1>
+
+        <h1 id="main-word" class="text-5xl md:text-9xl font-bold tracking-tighter lowercase">nothing.</h1>
         
         <div class="flex flex-col gap-2 items-center">
             <p id="timer" class="text-xl md:text-2xl opacity-50 font-light">00:00:00</p>
@@ -95,32 +206,42 @@
 
     </div>
 
-    <!-- Fail Overlay -->
+
     <div id="fail-overlay" class="fixed inset-0 flex items-center justify-center opacity-0 pointer-events-none z-50">
-        <div class="text-center">
-            <h2 class="text-black text-6xl md:text-8xl font-black uppercase tracking-tighter">YOU DID<br>SOMETHING</h2>
-            <p class="text-black text-xl mt-4 font-bold">Movement Detected.</p>
-            <p id="fail-score" class="text-black text-lg mt-2">You achieved nothing for: 0s</p>
+        <div class="text-center w-full max-w-lg px-4">
+            <h2 class="text-black text-5xl md:text-8xl font-black uppercase tracking-tighter leading-none mb-4">YOU DID<br>SOMETHING</h2>
+            <p class="text-black text-xl font-bold">Movement Detected.</p>
+            <p id="fail-score" class="text-black text-lg mt-2 mb-6">You achieved nothing for: 0s</p>
             
-            <div class="mt-8 flex gap-4 justify-center pointer-events-auto cursor-auto">
-                <button onclick="restartGame()" class="bg-black text-white px-6 py-3 border-2 border-black hover:bg-transparent hover:text-black transition-colors font-bold uppercase">
+
+            <div id="submit-score-area" class="bg-black p-4 mb-6 hidden">
+                <p class="text-white text-xs uppercase mb-2">Record your nothingness</p>
+                <div class="flex justify-center gap-2">
+                    <input type="text" id="player-name" maxlength="4" placeholder="____" class="bg-transparent border-b-2 border-white text-white text-center text-2xl w-32 uppercase font-bold focus:outline-none tracking-widest" oninput="this.value = this.value.toUpperCase()">
+                    <button onclick="submitToLeaderboard()" class="text-xs border border-white px-3 hover:bg-white hover:text-black transition-colors">SUBMIT</button>
+                </div>
+            </div>
+
+            <div class="flex flex-col md:flex-row gap-4 justify-center pointer-events-auto cursor-auto">
+                <button onclick="restartGame()" class="bg-black text-white px-6 py-3 border-2 border-black hover:bg-white hover:text-black transition-colors font-bold uppercase">
                     Try Again
                 </button>
                 <button onclick="shareScore()" class="bg-transparent text-black px-6 py-3 border-2 border-black hover:bg-black hover:text-white transition-colors font-bold uppercase">
                     Share Failure
                 </button>
             </div>
-            <!-- Add footnote here, hidden by default -->
+
+
             <p id="screenshot-footnote" class="text-black text-sm mt-8 font-bold uppercase">nothing.co.zw</p>
         </div>
     </div>
 
-    <!-- Instructions / Footer -->
+
     <div class="fixed bottom-8 text-center opacity-30 text-xs w-full pointer-events-none">
         Don't move. Don't touch. Don't scroll. Just be.
     </div>
 
-    <!-- Toast Notification -->
+
     <div id="toast" class="fixed top-4 bg-white text-black px-4 py-2 rounded shadow-lg transform -translate-y-20 transition-transform duration-300 z-50 font-bold">
         Copied to clipboard!
     </div>
@@ -130,8 +251,8 @@
         let startTime = null;
         let timerInterval = null;
         let isPlaying = false;
-        let lastScore = "00:00:00";
-        let rankIndex = 0;
+        let lastScoreStr = "00:00:00";
+        let lastScoreSeconds = 0;
         
         // DOM Elements
         const mainWord = document.getElementById('main-word');
@@ -144,6 +265,8 @@
         const rankDisplay = document.getElementById('rank-display');
         const toast = document.getElementById('toast');
         const screenshotFootnote = document.getElementById('screenshot-footnote');
+        const submitArea = document.getElementById('submit-score-area');
+        const nameInput = document.getElementById('player-name');
 
         // Ranks based on seconds
         const ranks = [
@@ -154,7 +277,11 @@
             { time: 60, title: "Void Walker", msg: "Impressive emptiness." },
             { time: 120, title: "Abyss Gazer", msg: "The void gazes back." },
             { time: 300, title: "Null Entity", msg: "Do you even exist?" },
-            { time: 600, title: "Absolute Zero", msg: "Godlike nothingness." }
+            { time: 600, title: "Absolute Zero", msg: "Godlike nothingness." },
+            { time: 1200, title: "THE GOAT", msg: "SUPER GOAT." },
+            { time: 1800, title: "GALAXY RULER", msg: "YOUU OWN THE WORLD OF NOTHINGNESS" }
+
+
         ];
 
         // Format time helper
@@ -172,7 +299,6 @@
         }
 
         function updateRank(elapsedSeconds) {
-            // Find the highest rank achieved
             let currentRank = ranks[0];
             for (let i = ranks.length - 1; i >= 0; i--) {
                 if (elapsedSeconds >= ranks[i].time) {
@@ -182,35 +308,25 @@
             }
 
             if (rankDisplay.innerText !== currentRank.title) {
-                // New rank unlocked effect
                 rankDisplay.innerText = currentRank.title;
                 statusDisplay.innerText = currentRank.msg;
-                
                 rankDisplay.classList.add('shake');
                 setTimeout(() => rankDisplay.classList.remove('shake'), 500);
-
-                // Reveal rank container after 5 seconds
                 if (elapsedSeconds >= 5) {
                     rankContainer.classList.remove('opacity-0');
                 }
             }
         }
 
-        // The Game Loop
         function updateTimer() {
             if (!isPlaying) return;
-
             const now = Date.now();
             const diff = now - startTime;
-            
             timerDisplay.innerText = formatTime(diff);
-            
-            // Random subtle glitch effect on the main word
             if (Math.random() > 0.99) {
                 mainWord.style.opacity = Math.random();
                 setTimeout(() => mainWord.style.opacity = 1, 50);
             }
-
             updateRank(Math.floor(diff / 1000));
         }
 
@@ -219,44 +335,79 @@
             
             isPlaying = false;
             clearInterval(timerInterval);
-            const finalTime = Date.now() - startTime;
-            lastScore = getReadableTime(finalTime);
+            const finalTimeMs = Date.now() - startTime;
+            lastScoreSeconds = Math.floor(finalTimeMs / 1000);
+            lastScoreStr = getReadableTime(finalTimeMs);
 
-            // Visual Fail Effects
             failOverlay.style.opacity = '1';
             failOverlay.style.pointerEvents = 'auto';
-            document.body.style.cursor = 'auto'; // Bring back cursor
+            document.body.style.cursor = 'auto'; 
             
-            failScore.innerText = `You achieved nothing for: ${lastScore}`;
+            failScore.innerText = `You achieved nothing for: ${lastScoreStr}`;
             
-            // Shake the screen
+            // Show submit area if score > 5 seconds
+            if(lastScoreSeconds > 5) {
+                submitArea.classList.remove('hidden');
+                submitArea.classList.add('block');
+                nameInput.value = ''; // Reset input
+                nameInput.focus();
+            } else {
+                 submitArea.classList.add('hidden');
+                 submitArea.classList.remove('block');
+            }
+
             document.body.classList.add('shake');
             setTimeout(() => document.body.classList.remove('shake'), 500);
         }
 
         function restartGame() {
-            // Reset UI
             failOverlay.style.opacity = '0';
             failOverlay.style.pointerEvents = 'none';
-            document.body.style.cursor = 'none'; // Hide cursor again
+            document.body.style.cursor = 'none';
             rankContainer.classList.add('opacity-0');
-            
-            // Reset Logic
+            submitArea.classList.add('hidden');
             startGame();
         }
 
         function startGame() {
-            // Small delay to prevent immediate fail if user just clicked button
             setTimeout(() => {
                 startTime = Date.now();
                 isPlaying = true;
                 timerInterval = setInterval(updateTimer, 100);
-                
-                // Reset text
                 rankDisplay.innerText = ranks[0].title;
                 statusDisplay.innerText = ranks[0].msg;
                 timerDisplay.innerText = "00:00:00";
             }, 500);
+        }
+
+        async function submitToLeaderboard() {
+            const name = nameInput.value.toUpperCase() || 'NIL';
+            const btn = document.querySelector('#submit-score-area button');
+            
+            if(!window.db) {
+                showToast("Connection failed :(");
+                return;
+            }
+
+            btn.innerText = "...";
+            
+            try {
+                // Path: /artifacts/{appId}/public/data/scores
+                await window.addDoc(window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'scores'), {
+                    name: name,
+                    seconds: lastScoreSeconds,
+                    timeStr: lastScoreStr,
+                    timestamp: window.serverTimestamp()
+                });
+                
+                showToast("Score Recorded to Void.");
+                submitArea.classList.add('hidden');
+            } catch (e) {
+                console.error("Error adding score: ", e);
+                showToast("Void Rejected Entry.");
+            } finally {
+                btn.innerText = "SUBMIT";
+            }
         }
 
         function shareScore() {
@@ -265,12 +416,12 @@
             shareBtn.innerText = "Generating...";
             shareBtn.disabled = true;
 
-            // 1. Copy text to clipboard using execCommand
-            const text = `I successfully did nothing for ${lastScore} at nothing.com. Can you do less?`;
+            const text = `I successfully did nothing for ${lastScoreStr} at nothing.co.zw. Can you do less?`;
             
+            // 1. Copy text
             const textArea = document.createElement("textarea");
             textArea.value = text;
-            textArea.style.position = "fixed"; // Avoid scrolling to bottom
+            textArea.style.position = "fixed";
             textArea.style.opacity = "0";
             document.body.appendChild(textArea);
             textArea.focus();
@@ -278,51 +429,37 @@
             
             try {
                 const successful = document.execCommand('copy');
-                if(successful) {
-                    showToast("Text copied & Image generating...");
-                } else {
-                    showToast("Image generating...");
-                }
+                if(successful) showToast("Text copied & Image generating...");
+                else showToast("Image generating...");
             } catch (err) {
-                console.error('Unable to copy', err);
                 showToast("Image generating...");
             }
             document.body.removeChild(textArea);
 
-
-            // 2. Generate Screenshot using html2canvas
-            // Show footnote for screenshot
+            // 2. Generate Screenshot
             screenshotFootnote.style.display = 'block';
+            submitArea.style.display = 'none'; // Hide input during screenshot
 
-            // We capture the document body to get the full effect
             html2canvas(document.body, {
-                backgroundColor: null, // Use existing background
-                scale: window.devicePixelRatio || 1, // Capture at proper resolution for sharper image
+                backgroundColor: null,
+                scale: window.devicePixelRatio || 1,
                 logging: false,
-                useCORS: true, // Enable CORS for any external assets (like fonts)
-                // The fail overlay is what we want to capture, so we don't need to hide anything specific
+                useCORS: true
             }).then(canvas => {
-                // Hide footnote again
                 screenshotFootnote.style.display = 'none';
+                if(lastScoreSeconds > 5) submitArea.style.display = 'block'; // Show input again
 
-                // Convert canvas to image data URL
-                // We use image/octet-stream to force a download in some browsers
                 const image = canvas.toDataURL("image/png").replace("image/png", "image/octet-stream");
-                
-                // Create a temporary link to trigger download
                 const link = document.createElement('a');
                 link.download = `nothing-score-${Date.now()}.png`;
                 link.href = image;
-                // Trigger the download
                 link.click();
                 
-                // Reset button state
                 shareBtn.innerText = originalText;
                 shareBtn.disabled = false;
             }).catch(err => {
-                // Hide footnote again
                 screenshotFootnote.style.display = 'none';
-
+                if(lastScoreSeconds > 5) submitArea.style.display = 'block';
                 console.error('Screenshot failed:', err);
                 shareBtn.innerText = originalText;
                 shareBtn.disabled = false;
@@ -338,26 +475,21 @@
             }, 2000);
         }
 
-        // --- Event Listeners for "Doing Something" ---
-
         const triggers = ['mousemove', 'keydown', 'scroll', 'touchstart', 'wheel'];
-
         triggers.forEach(event => {
             window.addEventListener(event, (e) => {
+                // Ignore inputs inside the name field
+                if (e.target.id === 'player-name') return;
+                
                 if (isPlaying) {
-                    // We allow a tiny buffer for mouse drift (optional, but good for UX)
                     failGame();
                 }
             });
         });
 
-        // Initialize
-        // We start with a click to get into the "zone" (and handle audio context if we added audio later)
         window.onload = () => {
-             // We start automatically but give a 1s grace period
              setTimeout(startGame, 1000);
         };
-
     </script>
 </body>
 </html>
