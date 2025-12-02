@@ -64,7 +64,8 @@
             const q = query(
                 collection(db, 'artifacts', appId, 'public', 'data', 'scores'), 
                 orderBy('seconds', 'desc'), 
-                limit(10)
+                limit(6
+                )
             );
             
             onSnapshot(q, (snapshot) => {
