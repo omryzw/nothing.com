@@ -64,7 +64,7 @@
             const q = query(
                 collection(db, 'artifacts', appId, 'public', 'data', 'scores'), 
                 orderBy('seconds', 'desc'), 
-                limit(5)
+                limit(10)
             );
             
             onSnapshot(q, (snapshot) => {
@@ -225,6 +225,8 @@
 
             <div id="submit-score-area" class="bg-black p-4 mb-6 hidden">
                 <p class="text-white text-xs uppercase mb-2">Record your nothingness</p>
+                <p class="text-white text-xs uppercase mb-2">Enter Name</p>
+
                 <div class="flex justify-center gap-2">
                     <input type="text" id="player-name" maxlength="4" placeholder="____" class="bg-transparent border-b-2 border-white text-white text-center text-2xl w-32 uppercase font-bold focus:outline-none tracking-widest" oninput="this.value = this.value.toUpperCase()">
                     <button onclick="submitToLeaderboard()" class="text-xs border border-white px-3 hover:bg-white hover:text-black transition-colors">SUBMIT</button>
